@@ -4,6 +4,8 @@ import torch
 import numpy as np
 import ddpg as DDPG
 import env as ENV
+import random
+import myplot as mplt
 
 
 def set_args():
@@ -28,13 +30,19 @@ def set_args():
         help = 'beta in wireless charging model')
     cfg.add_argument('--m_p', default = 5.6, type = float, \
         help = 'the price for a unit move')
+    cfg.add_argument('--action_L', default = 0, type = float, \
+        help = 'left border for action')
+    cfg.add_argument('--action_R', default = 1.0, type = float, \
+        help = 'right border for action')
     
     # 智能体参数
-    cfg.add_argument('--ep', default = 300, type = int, \
+    cfg.add_argument('--ep_train', default = 200, type = int, \
         help = 'training episodes')
-    cfg.add_argument('--memory_cap', default = 512, type = int, \
+    cfg.add_argument('--ep_test', default = 200, type = int, \
+        help = 'testing episodes')
+    cfg.add_argument('--memory_cap', default = 51200, type = int, \
         help = 'capacity of memory pool')
-    cfg.add_argument('--batch_size', default = 16, type = int, \
+    cfg.add_argument('--batch_size', default = 128, type = int, \
         help = 'batch size for sampling')
     cfg.add_argument('--gamma', default = 0.8, type = float, \
         help = 'the discount factor')
@@ -51,8 +59,8 @@ def set_args():
 
     # 结果存储路径
     cwd = os.getcwd()
-    cfg.add_argument('--model_path', default = cwd + '/model/')
-    cfg.add_argument('--reward_path', default = cwd + '/reward/')
+    cfg.add_argument('--model_path', default = cwd + '\\model\\')
+    # cfg.add_argument('--reward_path', default = cwd + '\\reward\\')
     
     args = cfg.parse_args()
     args.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -63,26 +71,51 @@ def set_args():
 
 
 def train(cfg, env, agent):
+    print('-------- start traininng on {} ----------'.format(cfg.device))
     ep_rewards = []
-    for i in range(1, cfg.ep + 1):
+    for i in range(1, cfg.ep_train + 1):
         step = 0
         state = env.reset()
         done = False
         ep_reward = 0
         while not done:
             step += 1
-            action = agent.choose_action(state, noise = True)
+            action = agent.choose_action(state, noise = False) \
+                if random.random() > 0.01 / np.log2(i + 1) else np.random.rand(2)
             next_state, reward, done = env.step(action)
             ep_reward += reward
+            # 存入经验池的state、action、next_action均为numpy向量，reward为标量，done为bool
             agent.memory_pool.add(state, action, reward, next_state, done)
             agent.update()
             state = next_state
             # print('action:', action)
             # print('reward:', reward)
         ep_rewards.append(ep_reward)
-        print('Episode:{}, Cumulative Reward:{}, Total Steps:'\
-            .format(i, ep_reward, step))
-    agent.save_actor()
+        print('Train Episode:{}/{} | Cumulative Reward:{} | Total Steps:{}'\
+            .format(i, cfg.ep_train, ep_reward, step))
+    print('--------- training end ----------')
+    return ep_rewards
+
+def test(cfg, env, agent):
+    print('-------- start testing on {} ----------'.format(cfg.device))
+    ep_rewards = []
+    for i in range(1, cfg.ep_test + 1):
+        step = 0
+        state = env.reset()
+        done = False
+        ep_reward = 0
+        while not done:
+            step += 1
+            action = agent.choose_action(state, noise = False)
+            next_state, reward, done = env.step(action)
+            ep_reward += reward
+            state = next_state
+            # print('action:', action)
+            # print('reward:', reward)
+        ep_rewards.append(ep_reward)
+        print('Test Episode:{}/{} | Cumulative Reward:{} | Total Steps:{}'\
+            .format(i, cfg.ep_test, ep_reward, step))
+    print('--------- testing end ----------')
     return ep_rewards
 
 
@@ -92,27 +125,20 @@ if __name__ == '__main__':
     cfg = set_args()
     # 创建智能体和环境对象
     env = ENV.ENV(cfg)
-    agent = DDPG.DDPG(cfg)
+    train_agent = DDPG.DDPG(cfg)
     # 训练
-    # train(cfg, env, agent)
+    train_rewards = train(cfg, env, train_agent)
     # 绘图
-
+    mplt.mplt([range(len(train_rewards))], [train_rewards], ['episode reward'], \
+            title = 'MC_DDPG_train')
     # 保存参数
-
+    train_agent.save_actor()
     # 加载参数
-
+    test_agent = DDPG.DDPG(cfg)
+    test_agent.load_actor()
     # 测试
-
+    test_rewards = test(cfg, env, test_agent)
     # 绘图
+    mplt.mplt([range(len(test_rewards))], [test_rewards], ['episode reward'], \
+            title = 'MC_DDPG_test')
 
-
-    # a=np.random.random([2,cfg.state_dim])*2
-    # b= torch.FloatTensor(a)
-    # actor = DDPG.Actor(cfg.state_dim, cfg.hidden_dim, cfg.hidden_layer, \
-    #     cfg.action_dim)
-    # print(actor(b, noise = True))
-    # print(actor(b, noise = True))
-    # if torch.cuda.is_available():
-    #     print('111111111111')
-    # else:
-    #     print('00000000000000000')

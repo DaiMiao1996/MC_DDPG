@@ -150,7 +150,7 @@ class DDPG:
         self.device = cfg.device
         self.tau = cfg.tau
         self.model_path = cfg.model_path
-        self.reward_path = cfg.reward_path
+        # self.reward_path = cfg.reward_path
     
     def choose_action(self, state, noise = False):
         state = torch.FloatTensor(state).to(self.device)
@@ -163,6 +163,7 @@ class DDPG:
         else:
             states, actions, rewards, next_states, dones = \
                 self.memory_pool.sample(self.batch_size)
+            # 强转，后续操作不会改变经验池中的信息
             states = torch.FloatTensor(np.array(states)).to(self.device)
             actions = torch.FloatTensor(np.array(actions)).to(self.device)
             rewards = torch.FloatTensor(np.array(rewards)).unsqueeze(1).to(self.device)
@@ -196,9 +197,11 @@ class DDPG:
                     be_param.data * self.tau)
     
     def save_actor(self):
+        os.makedirs(self.model_path, exist_ok = True)
         torch.save(self.be_actor, self.model_path + 'actor.pt')
     
     def load_actor(self):
+        os.makedirs(self.model_path, exist_ok = True)
         self.be_actor = torch.load(self.model_path + 'actor.pt')
 
 

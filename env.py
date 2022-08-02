@@ -31,7 +31,7 @@ class ENV:
         self.state = np.concatenate((self.dem, self.posi), axis = 0)
 
 
-    def reset(self):
+    def reset(self) -> np:
         # 重随传感器充电需求
         self.dem = np.random.rand(self.N) * self.b_C
         
@@ -40,11 +40,12 @@ class ENV:
 
         # 构建重随后的环境状态
         self.state = np.concatenate((self.dem, self.posi), axis = 0)
-        return self.state
+        return self.state.copy()  # 防止后续状态的更新对已记录的状态造成修改
 
 
-    def step(self, a):
+    def step(self, action):
         # 将actor网络输出的[0, 1]动作逆转换成环境中的动作，即确定移动充电桩的新驻留点坐标
+        a = action.copy()  # 防止该动作在存入经验池时发生改变
         a[0] = a[0] * self.width
         a[1] = a[1] * self.height
 
@@ -66,8 +67,8 @@ class ENV:
         move_cost = self.m_p * ((a[0] - self.state[self.N] * self.width)**2 + \
             (a[1] - self.state[self.N + 1] * self.height)**2)**0.5
         # 计算单步奖赏
-        reward = 1000 * dem_sfy / (charging_cost + move_cost) if charging_cost + move_cost != 0 else 0
-        # reward = 1000 * dem_sfy - (charging_cost + move_cost)
+        # reward = 1000 * dem_sfy / (charging_cost + move_cost) if charging_cost + move_cost != 0 else -1
+        reward = 10000 * dem_sfy - (charging_cost + move_cost)
 
         # 更新环境状态中关于移动充电桩位置的信息
         self.state[self.N] = a[0] / self.width
@@ -81,7 +82,7 @@ class ENV:
                 break
         
         # 返回下一状态、奖赏和episode终止标志
-        return self.state, reward, done
+        return self.state.copy(), reward, done  # numpy向量的深拷贝、标量、bool
 
 
 
